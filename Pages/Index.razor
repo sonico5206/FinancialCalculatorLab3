@@ -1,48 +1,72 @@
 @page "/"
-
 @using System.Globalization
 @using System.Text.RegularExpressions
+@using System.Text
+@using static Microsoft.AspNetCore.Components.Web.RenderMode
 
+@rendermode InteractiveAuto
 
 <PageTitle>Финансовый Калькулятор</PageTitle>
-
-<h1>Финансовый Калькулятор: Сложение и Вычитание Больших Чисел</h1>
-
+<h1>Финансовый Калькулятор: Операции с Большими Числами</h1>
 <p>ФИО: Кулич София Петровна</p>
 <p>Курс: 4, Группа: 4</p>
 <p>Год: 2025</p>
+<p>Введите четыре числа (от -1 000 000 000 000.0000000000 до +1 000 000 000 000.0000000000).</p>
 
-<p>Введите два числа (от -1 000 000 000 000.000000 до +1 000 000 000 000.000000). Выберите операцию.</p>
+<div style="display: flex; align-items: center; flex-wrap: wrap; gap: 10px;">
+    <input type="text" @bind="num1Str" placeholder="Число 1, например, 1.0" style="margin-right: 10px;" />
 
-<div>
-    <label>Число 1:</label>
-    <input type="text" @bind="num1Str" placeholder="например, 1.0" />
+    <select @bind="op1" style="margin-right: 10px;">
+        <option value="+">+</option>
+        <option value="-">-</option>
+        <option value="*">×</option>
+        <option value="/">÷</option>
+    </select>
+
+    <span>(</span>
+
+    <input type="text" @bind="num2Str" placeholder="Число 2, например, 2.0" style="margin-right: 10px;" />
+
+    <select @bind="op2" style="margin-right: 10px;">
+        <option value="+">+</option>
+        <option value="-">-</option>
+        <option value="*">×</option>
+        <option value="/">÷</option>
+    </select>
+
+    <input type="text" @bind="num3Str" placeholder="Число 3, например, 3.0" style="margin-right: 10px;" />
+
+    <span>)</span>
+
+    <select @bind="op3" style="margin-right: 10px;">
+        <option value="+">+</option>
+        <option value="-">-</option>
+        <option value="*">×</option>
+        <option value="/">÷</option>
+    </select>
+
+    <input type="text" @bind="num4Str" placeholder="Число 4, например, 4.0" />
 </div>
 
-<div>
-    <label>Число 2:</label>
-    <input type="text" @bind="num2Str" placeholder="например, 2.0" />
-</div>
+@if (!string.IsNullOrEmpty(fullResult))
+{
+    <p>@num1Str @op1 (@num2Str @op2 @num3Str) @op3 @num4Str = @fullResult</p>
+}
 
-<div>
-    <label>Метод округления для результата:</label>
-    <select @bind="roundingMethod">
+<div style="margin-top: 10px;">
+    <label>Метод округления для итогового результата (до целых):</label>
+    <select value="@roundingMethod" @onchange="OnRoundingChanged">
         <option value="Mathematical">Математическое (половина вверх)</option>
         <option value="Banking">Банковское (половина к четному)</option>
+        <option value="Truncation">Усечение (к нулю)</option>
     </select>
 </div>
 
-<div>
-    <button @onclick="CalculateSum">Сложение (+)</button>
-    <button @onclick="CalculateDifference">Вычитание (-)</button>
-    <button @onclick="CalculateMultiplication">Умножение (×)</button>
-    <button @onclick="CalculateDivision">Деление (÷)</button>
-</div>
+<p>Округленный результат: @roundedResult</p>
 
-@if (!string.IsNullOrEmpty(result))
-{
-    <p>Результат: @result</p>
-}
+<div style="margin-top: 10px;">
+    <button @onclick="PerformCalculation">Рассчитать</button>
+</div>
 
 @if (!string.IsNullOrEmpty(error))
 {
@@ -50,145 +74,173 @@
 }
 
 @code {
-    private string num1Str = "";
-    private string num2Str = "";
-    private string roundingMethod = "Mathematical"; // По умолчанию банковское
-    private string result = "";
+    private string num1Str = "0";
+    private string num2Str = "0";
+    private string num3Str = "0";
+    private string num4Str = "0";
+    private string op1 = "+";
+    private string op2 = "+";
+    private string op3 = "+";
+    private string roundingMethod = "Mathematical";
+    private string fullResult = "";
+    private string roundedResult = "";
     private string error = "";
-    private const decimal MaxRange = 1000000000000M;
+    private decimal? calcResultInternal = null;
+    private const decimal MaxRange = 1000000000000.0000000000M;
 
-    private void CalculateSum()
+    protected override void OnInitialized()
     {
-        PerformCalculation((a, b) => a + b);
+        PerformCalculation();
     }
 
-    private void CalculateDifference()
-    {
-        PerformCalculation((a, b) => a - b);
-    }
-
-    private void CalculateMultiplication()
-    {
-        PerformCalculation((a, b) => a * b);
-    }
-
-    private void CalculateDivision()
-    {
-        if (num2Str.Trim() == "0" || num2Str.Trim() == "0.0")
-        {
-            error = "Ошибка: деление на ноль невозможно.";
-            result = "";
-            return;
-        }
-        PerformCalculation((a, b) => a / b);
-    }
-
-    private string FormatResult(decimal value)
-    {
-        // Округление
-        MidpointRounding mode = roundingMethod == "Mathematical" ? MidpointRounding.AwayFromZero : MidpointRounding.ToEven;
-        value = Math.Round(value, 6, mode);
-
-        // Разделение целой и дробной части
-        string[] parts = value.ToString("F6", CultureInfo.InvariantCulture).Split('.');
-        string integerPart = parts[0];
-        string fractionalPart = parts[1];
-
-        // Форматирование целой части с пробелами
-        string formattedInteger = string.Format(CultureInfo.InvariantCulture, "{0:N0}", decimal.Parse(integerPart)).Replace(",", " ");
-
-        // Удаление незначащих нулей в дробной части
-        fractionalPart = fractionalPart.TrimEnd('0');
-        if (fractionalPart == "") fractionalPart = "0";
-
-        return $"{formattedInteger}.{fractionalPart}";
-    }
-
-
-    private bool IsValidInput(string input)
-    {
-        // Проверка на недопустимые символы
-        if (input.Contains("--") || input.Contains("..") || input.Contains("-.") || input.Contains(".-"))
-            return false;
-
-        // Проверка на корректную разрядность и отсутствие двойных пробелов
-        bool formatOk = Regex.IsMatch(input, @"^(?:\d{1,3}(?: \d{3})*)(?:\.\d+)?$");
-        bool noDoubleSpaces = !Regex.IsMatch(input, @" {2,}");
-
-        if (!formatOk || !noDoubleSpaces)
-            return false;
-
-        // Удаление пробелов и замена запятой на точку
-        string cleaned = input.Replace(" ", "").Replace(',', '.');
-
-        // Проверка на корректность числа
-        return decimal.TryParse(cleaned, NumberStyles.Number, CultureInfo.InvariantCulture, out _);
-    }
-
-
-
-    private void PerformCalculation(Func<decimal, decimal, decimal> operation)
+    private void PerformCalculation()
     {
         error = "";
-        result = "";
-
-        // Замена запятой на точку для унификации разделителя (поддержка . и ,)
+        fullResult = "";
+        roundedResult = "";
+        calcResultInternal = null;
+        // Замена запятой на точку для унификации
         num1Str = num1Str.Replace(',', '.');
         num2Str = num2Str.Replace(',', '.');
-
-        if (!IsValidInput(num1Str))
-        {
-            error = "Некорректный ввод Числа 1.";
-            return;
-        }
-
-
-        if (!IsValidInput(num2Str))
-        {
-            error = "Некорректный ввод Числа 2.";
-            return;
-        }
-
-        //Теперь можно безопасно парсить
+        num3Str = num3Str.Replace(',', '.');
+        num4Str = num4Str.Replace(',', '.');
+        // Обработка пустых полей
+        if (string.IsNullOrWhiteSpace(num1Str)) num1Str = "0";
+        if (string.IsNullOrWhiteSpace(num2Str)) num2Str = "0";
+        if (string.IsNullOrWhiteSpace(num3Str)) num3Str = "0";
+        if (string.IsNullOrWhiteSpace(num4Str)) num4Str = "0";
+        // Валидация ввода
+        if (!IsValidInput(num1Str)) { error = "Некорректный ввод Числа 1."; return; }
+        if (!IsValidInput(num2Str)) { error = "Некорректный ввод Числа 2."; return; }
+        if (!IsValidInput(num3Str)) { error = "Некорректный ввод Числа 3."; return; }
+        if (!IsValidInput(num4Str)) { error = "Некорректный ввод Числа 4."; return; }
+        // Очистка пробелов
         string cleaned1 = num1Str.Replace(" ", "");
         string cleaned2 = num2Str.Replace(" ", "");
-        // Парсинг с invariant culture для независимости от региональных настроек ОС
-        if (!decimal.TryParse(cleaned1, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal num1))
-        {
-            error = "Некорректное Число 1. Введите validное десятичное число.";
-            return;
-        }
-
-        if (!decimal.TryParse(cleaned2, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal num2))
-        {
-            error = "Некорректное Число 2. Введите validное десятичное число.";
-            return;
-        }
-
-
+        string cleaned3 = num3Str.Replace(" ", "");
+        string cleaned4 = num4Str.Replace(" ", "");
+        // Парсинг
+        if (!decimal.TryParse(cleaned1, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal num1)) { error = "Некорректное Число 1."; return; }
+        if (!decimal.TryParse(cleaned2, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal num2)) { error = "Некорректное Число 2."; return; }
+        if (!decimal.TryParse(cleaned3, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal num3)) { error = "Некорректное Число 3."; return; }
+        if (!decimal.TryParse(cleaned4, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal num4)) { error = "Некорректное Число 4."; return; }
         // Проверка диапазона входных чисел
-        if (Math.Abs(num1) > MaxRange || Math.Abs(num2) > MaxRange)
+        if (Math.Abs(num1) > MaxRange || Math.Abs(num2) > MaxRange || Math.Abs(num3) > MaxRange || Math.Abs(num4) > MaxRange)
         {
-            error = "Числа превышают допустимый диапазон (±1 000 000 000 000.000000).";
+            error = "Числа превышают допустимый диапазон (±1 000 000 000 000.0000000000).";
             return;
         }
-
-        decimal calcResult = operation(num1, num2);
-
-        // Проверка переполнения результата
-        if (Math.Abs(calcResult) > MaxRange)
+        // Нормализация строк для отображения
+        num1Str = FormatNumber(num1, 10);
+        num2Str = FormatNumber(num2, 10);
+        num3Str = FormatNumber(num3, 10);
+        num4Str = FormatNumber(num4, 10);
+        // Вычисление inner: num2 op2 num3
+        if (op2 == "/" && num3 == 0) { error = "Ошибка: деление на ноль (оператор 2)."; return; }
+        decimal inner = ApplyOperation(num2, num3, op2);
+        if (Math.Abs(inner) > MaxRange) { error = "Переполнение: промежуточный результат превышает диапазон."; return; }
+        inner = Math.Round(inner, 10, MidpointRounding.AwayFromZero);
+        // Определение приоритетов
+        int pri1 = GetPriority(op1);
+        int pri3 = GetPriority(op3);
+        decimal calcResult;
+        if (pri1 >= pri3)
         {
-            error = "Переполнение: результат превышает допустимый диапазон.";
-            return;
+            // Слева направо: (num1 op1 inner) op3 num4
+            if (op1 == "/" && inner == 0) { error = "Ошибка: деление на ноль (оператор 1)."; return; }
+            decimal left = ApplyOperation(num1, inner, op1);
+            if (Math.Abs(left) > MaxRange) { error = "Переполнение: промежуточный результат превышает диапазон."; return; }
+            left = Math.Round(left, 10, MidpointRounding.AwayFromZero);
+            if (op3 == "/" && num4 == 0) { error = "Ошибка: деление на ноль (оператор 3)."; return; }
+            calcResult = ApplyOperation(left, num4, op3);
         }
-
-        // Округление до 6 знаков после точки с выбранным методом
-        MidpointRounding mode = roundingMethod == "Mathematical" ? MidpointRounding.AwayFromZero : MidpointRounding.ToEven;
-        calcResult = Math.Round(calcResult, 6, mode);
-
-        // Вывод в фиксированной нотации с 6 знаками после точки (без экспоненты)
-        //result = calcResult.ToString("F6", CultureInfo.InvariantCulture);
-        // Станет:
-        result = FormatResult(calcResult);
+        else
+        {
+            // Справа: num1 op1 (inner op3 num4)
+            if (op3 == "/" && num4 == 0) { error = "Ошибка: деление на ноль (оператор 3)."; return; }
+            decimal right = ApplyOperation(inner, num4, op3);
+            if (Math.Abs(right) > MaxRange) { error = "Переполнение: промежуточный результат превышает диапазон."; return; }
+            right = Math.Round(right, 10, MidpointRounding.AwayFromZero);
+            if (op1 == "/" && right == 0) { error = "Ошибка: деление на ноль (оператор 1)."; return; }
+            calcResult = ApplyOperation(num1, right, op1);
+        }
+        if (Math.Abs(calcResult) > MaxRange) { error = "Переполнение: результат превышает диапазон."; return; }
+        calcResult = Math.Round(calcResult, 10, MidpointRounding.AwayFromZero);
+        // Форматирование полного результата
+        fullResult = FormatNumber(calcResult, 10);
+        calcResultInternal = calcResult;
+        UpdateRounded();
+    }
+    private int GetPriority(string op)
+    {
+        return op switch
+        {
+            "+" or "-" => 1,
+            "*" or "/" => 2,
+            _ => 0
+        };
+    }
+    private void OnRoundingChanged(ChangeEventArgs e)
+    {
+        roundingMethod = (string)e.Value;
+        UpdateRounded();
+    }
+    private void UpdateRounded()
+    {
+        if (calcResultInternal == null) return;
+        decimal roundedValue;
+        if (roundingMethod == "Truncation")
+        {
+            roundedValue = Math.Truncate(calcResultInternal.Value);
+        }
+        else
+        {
+            MidpointRounding mode = roundingMethod == "Mathematical" ? MidpointRounding.AwayFromZero : MidpointRounding.ToEven;
+            roundedValue = Math.Round(calcResultInternal.Value, 0, mode);
+        }
+        roundedResult = FormatNumber(roundedValue, 0);
+    }
+    private decimal ApplyOperation(decimal a, decimal b, string op)
+    {
+        return op switch
+        {
+            "+" => a + b,
+            "-" => a - b,
+            "*" => a * b,
+            "/" => a / b,
+            _ => 0 // Не должно произойти
+        };
+    }
+    private string FormatNumber(decimal value, int precision)
+    {
+        bool isNegative = value < 0;
+        decimal absValue = Math.Abs(value);
+        string str = absValue.ToString($"F{precision}", CultureInfo.InvariantCulture);
+        string[] parts = str.Split('.');
+        string intPart = parts[0];
+        string fracPart = precision > 0 ? parts[1].TrimEnd('0') : "";
+        // Форматирование целой части с пробелами
+        StringBuilder formattedInt = new StringBuilder();
+        for (int i = intPart.Length - 1, count = 0; i >= 0; i--)
+        {
+            formattedInt.Insert(0, intPart[i]);
+            count++;
+            if (count % 3 == 0 && i > 0) formattedInt.Insert(0, ' ');
+        }
+        string result = (isNegative ? "-" : "") + formattedInt.ToString();
+        if (precision > 0 && !string.IsNullOrEmpty(fracPart))
+        {
+            result += "." + fracPart;
+        }
+        return result;
+    }
+    private bool IsValidInput(string input)
+    {
+        if (input.Contains("--") || input.Contains("..") || input.Contains("-.") || input.Contains(".-")) return false;
+        bool formatOk = Regex.IsMatch(input, @"^[-+]?(?:(?:\d{1,3}(?: ?\d{3})*)?(?:\.\d+)?|\.\d+)$");
+        bool noDoubleSpaces = !Regex.IsMatch(input, @" {2,}");
+        if (!formatOk || !noDoubleSpaces) return false;
+        string cleaned = input.Replace(" ", "").Replace(',', '.');
+        return decimal.TryParse(cleaned, NumberStyles.Number, CultureInfo.InvariantCulture, out _);
     }
 }
